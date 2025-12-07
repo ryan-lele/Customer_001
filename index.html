@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Visual Alchemy - Silk & Gold</title>
+    <title>Visual Alchemy - Frozen Memory</title>
     
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="config.js"></script>
@@ -12,108 +12,157 @@
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Times New Roman', serif; }
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
         
-        /* UI 层 */
+        /* === UI 通用 === */
         .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; transition: opacity 0.8s ease; }
         .ui-hidden { opacity: 0 !important; pointer-events: none !important; }
         .clickable { pointer-events: auto; cursor: pointer; }
 
-        /* UI 1: 互动界面 */
-        #ui-interactive { display: flex; flex-direction: column; align-items: center; padding-top: 5vh; }
+        /* === 礼物加载层 === */
+        #gift-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #050505; z-index: 999;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            transition: opacity 1.5s ease;
+        }
+        .gift-box { font-family: 'Cinzel', serif; color: #d4af37; text-align: center; }
+        .gift-title { font-size: 14px; letter-spacing: 4px; color: rgba(255,255,255,0.6); margin-bottom: 20px; text-transform: uppercase; }
+        .sender-name { font-size: 24px; color: #fceea7; text-shadow: 0 0 20px rgba(212, 175, 55, 0.6); margin-bottom: 40px; }
+        .progress-container { width: 200px; height: 2px; background: rgba(255,255,255,0.1); position: relative; margin-bottom: 30px; }
+        .progress-bar { width: 0%; height: 100%; background: #d4af37; box-shadow: 0 0 10px #d4af37; transition: width 0.2s; }
+        .open-btn {
+            padding: 15px 40px; border: 1px solid #d4af37; color: #d4af37; background: transparent;
+            font-family: 'Cinzel', serif; font-size: 16px; letter-spacing: 4px; cursor: pointer;
+            opacity: 0; transform: translateY(20px); transition: all 0.8s; pointer-events: none;
+        }
+        .open-btn.ready { opacity: 1; transform: translateY(0); pointer-events: auto; }
+        .open-btn:hover { background: #d4af37; color: #000; box-shadow: 0 0 30px rgba(212, 175, 55, 0.6); }
+
+        /* === 互动界面 === */
+        #ui-interactive { display: flex; flex-direction: column; align-items: center; padding-top: 8vh; }
         h1 { 
-            color: #fceea7; font-size: 36px; margin: 0; letter-spacing: 4px; 
+            color: #fceea7; font-size: 32px; margin: 0; letter-spacing: 4px; 
             text-shadow: 0 0 40px rgba(252, 238, 167, 0.6); 
             font-family: 'Cinzel', serif; text-transform: uppercase;
             background: linear-gradient(to bottom, #fff, #ffcc00); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
+        
         .gesture-hint { 
-            color: rgba(255,215,0,0.8); font-size: 11px; margin-top: 15px; letter-spacing: 2px; text-align: center; line-height: 1.8; 
-            text-transform: uppercase; text-shadow: 0 0 5px rgba(255,215,0,0.3);
-            background: rgba(0,0,0,0.4); padding: 10px 20px; border-radius: 20px; border: 1px solid rgba(255,215,0,0.2);
+            margin-top: 20px; display: flex; gap: 20px;
+            background: rgba(0,0,0,0.3); padding: 10px 20px; border-radius: 30px; border: 1px solid rgba(255,215,0,0.1);
         }
+        .icon-box { font-size: 20px; opacity: 0.7; text-shadow: 0 0 10px rgba(255,215,0,0.4); filter: grayscale(0.5); transition: all 0.3s; }
+        .icon-box.active { opacity: 1; transform: scale(1.3); filter: grayscale(0); text-shadow: 0 0 20px rgba(255,50,50,0.8); }
 
-        /* 按钮组 */
+        /* === 按钮组 === */
         .btn-group-right { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 20px; align-items: flex-end; }
         
-        /* 回到灵气按钮 */
-        .return-btn {
+        .return-btn, .quantum-btn {
             writing-mode: vertical-rl; text-orientation: mixed;
+            backdrop-filter: blur(10px); transition: all 0.5s; border-radius: 4px;
+        }
+        
+        .return-btn {
             background: rgba(80, 0, 0, 0.6); border: 1px solid rgba(255, 50, 50, 0.6);
             color: #ffcccc; padding: 15px 10px; font-size: 12px; letter-spacing: 3px;
-            backdrop-filter: blur(10px); transition: all 0.5s;
-            box-shadow: 0 0 15px rgba(255, 0, 0, 0.3);
-            border-radius: 4px; opacity: 0; pointer-events: none; transform: translateX(50px);
+            box-shadow: 0 0 15px rgba(255, 0, 0, 0.3); opacity: 0; pointer-events: none; transform: translateX(50px);
         }
         .return-btn.active { opacity: 1; pointer-events: auto; transform: translateX(0); }
-        .return-btn:hover { background: #ff3333; color: #fff; box-shadow: 0 0 30px rgba(255, 0, 0, 0.8); }
-
-        /* 粒子纠缠按钮 */
+        
         .quantum-btn {
-            writing-mode: vertical-rl; text-orientation: mixed;
             background: rgba(10, 10, 10, 0.7); border: 1px solid rgba(212, 175, 55, 0.6);
             color: #d4af37; padding: 20px 12px; font-size: 13px; letter-spacing: 4px;
-            backdrop-filter: blur(10px); transition: all 0.5s;
-            box-shadow: 0 0 20px rgba(212, 175, 55, 0.2); border-radius: 4px;
+            box-shadow: 0 0 20px rgba(212, 175, 55, 0.2);
         }
-        .quantum-btn:hover { background: #d4af37; color: #000; box-shadow: 0 0 40px rgba(212, 175, 55, 0.8); border-color: #fff; }
+
+        /* === 录制按钮 (左下角) === */
+        #record-btn {
+            position: absolute; bottom: 30px; left: 20px; width: 50px; height: 50px;
+            border: 2px solid rgba(255,255,255,0.3); border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            cursor: pointer; z-index: 20; transition: all 0.3s; pointer-events: auto;
+            backdrop-filter: blur(5px);
+        }
+        #record-inner {
+            width: 20px; height: 20px; background: #ff4444; border-radius: 50%; transition: all 0.3s;
+        }
+        #record-btn.recording { border-color: #ff4444; box-shadow: 0 0 15px #ff4444; }
+        #record-btn.recording #record-inner { width: 14px; height: 14px; border-radius: 2px; animation: pulseRed 1s infinite; }
+        @keyframes pulseRed { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        /* === 摄像头 HUD (右下角) === */
+        #webcam-hud { 
+            position: absolute; bottom: 20px; right: 20px; width: 120px; height: 90px; 
+            border: 1px solid rgba(212,175,55,0.3); border-radius: 8px; overflow: hidden;
+            z-index: 20; opacity: 0; transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+            pointer-events: auto; cursor: pointer;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8); background: #000;
+        }
+        #webcam-hud.active { opacity: 0.8; }
+        #webcam-hud.minimized {
+            width: 30px; height: 30px; border-radius: 50%; border-color: rgba(212,175,55,0.8);
+        }
+        #webcam-hud.minimized video { opacity: 0; }
+        /* 最小化时的指示灯 */
+        #webcam-hud::after {
+            content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 8px; height: 8px; background: #d4af37; border-radius: 50%; opacity: 0; transition: opacity 0.3s;
+        }
+        #webcam-hud.minimized::after { opacity: 1; box-shadow: 0 0 8px #d4af37; }
+        
+        #webcam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); transition: opacity 0.3s; }
 
         /* UI 2 & 3 */
         #ui-waiting { opacity: 0; display: flex; justify-content: center; align-items: center; }
         .status-text { color: #fff; font-size: 14px; letter-spacing: 6px; animation: breathe 3s infinite ease-in-out; text-shadow: 0 0 10px rgba(255,255,255,0.5); }
         @keyframes breathe { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
-        #ui-final { opacity: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; padding-bottom: 80px; }
+        #ui-final { opacity: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; padding-bottom: 15vh; }
         .final-msg { color: #d4af37; font-size: 22px; font-weight: bold; text-shadow: 0 0 25px rgba(212, 175, 55, 0.9); transform: translateY(20px); transition: all 1s; font-family: 'Cinzel', serif; }
-
-        #loader { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 100; display: flex; justify-content: center; align-items: center; transition: opacity 0.8s; }
-        .spinner { width: 50px; height: 50px; border: 1px solid #333; border-top: 1px solid #d4af37; border-radius: 50%; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
-        /* 摄像头小窗 (HUD) */
-        #webcam-hud { 
-            position: absolute; bottom: 20px; right: 20px; width: 160px; height: 120px; 
-            border: 1px solid rgba(212,175,55,0.3); border-radius: 8px; overflow: hidden;
-            z-index: 20; opacity: 0; transition: opacity 0.5s; pointer-events: none;
-            box-shadow: 0 0 20px rgba(0,0,0,0.8);
-        }
-        #webcam-hud.active { opacity: 0.6; }
-        #webcam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); /* 镜像 */ }
 
     </style>
     <style>@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap');</style>
     <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/", "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/+esm" } }</script>
 </head>
 <body>
-    <!-- 占位音频，防止报错 -->
     <audio id="bgm" loop preload="auto"></audio>
     
-    <div id="loader"><div class="spinner"></div></div>
+    <div id="gift-layer">
+        <div class="gift-box">
+            <div class="gift-title">A Christmas Gift</div>
+            <div class="sender-name">From ...</div>
+            <div class="progress-container">
+                <div class="progress-bar" id="progress-bar"></div>
+            </div>
+            <button class="open-btn" id="open-btn" onclick="openGift()">OPEN GIFT</button>
+        </div>
+    </div>
+
     <div id="canvas-container"></div>
 
-    <!-- UI 1: 互动模式 -->
     <div id="ui-interactive" class="ui-layer">
         <h1>Merry Christmas</h1>
         <div class="gesture-hint">
-            🖐 张开=我 | ☝️ 单指=你 | ✊ 握拳=红心<br>
-            😐 点头=YES | 👋 移动手掌旋转视角
+            <div class="icon-box" id="icon-wo">🖐</div>
+            <div class="icon-box" id="icon-ni">☝️</div>
+            <div class="icon-box" id="icon-heart">✊</div>
+            <div class="icon-box" id="icon-yes">😐</div>
         </div>
     </div>
 
-    <!-- 右侧按钮组 -->
     <div class="btn-group-right ui-layer clickable">
-        <div id="return-btn" class="return-btn clickable" onclick="returnToInteractive()">
-            ⟲ 回到灵气
-        </div>
-        <div id="quantum-btn" class="quantum-btn clickable" onclick="enterQuantumMode()">
-            看看他想说什么？
-        </div>
+        <div id="return-btn" class="return-btn clickable" onclick="returnToInteractive()">⟲ 回到灵气</div>
+        <div id="quantum-btn" class="quantum-btn clickable" onclick="enterQuantumMode()">看看他想说什么？</div>
     </div>
 
-    <!-- UI 2: 等待模式 -->
+    <!-- [修改 3] 录制按钮 -->
+    <div id="record-btn" class="ui-layer clickable" onclick="toggleRecording()">
+        <div id="record-inner"></div>
+    </div>
+
     <div id="ui-waiting" class="ui-layer"><div class="status-text">WAITING FOR LOVE SIGNAL...</div></div>
-    <!-- UI 3: 最终展示 -->
     <div id="ui-final" class="ui-layer"><div class="final-msg" id="final-msg"></div></div>
     
-    <!-- 摄像头 HUD -->
-    <div id="webcam-hud"><video id="webcam" autoplay playsinline muted></video></div>
+    <!-- [修改 2] 可收起的 HUD -->
+    <div id="webcam-hud" onclick="toggleHud(this)"><video id="webcam" autoplay playsinline muted></video></div>
 
     <script type="module">
         import * as THREE from 'three';
@@ -123,77 +172,157 @@
         import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
         import { FilesetResolver, HandLandmarker, FaceLandmarker } from '@mediapipe/tasks-vision';
 
-        // === 配置与状态 ===
         const CFG = window.CONFIG || { business: { coupleName: "May & Commander", topic: "test" }, assets: { photoUrl: "", bgmUrl: "" } };
+        document.querySelector('.sender-name').innerText = `From ${CFG.business.coupleName}`;
 
         const STATE = {
-            mode: 'INTERACTIVE', // INTERACTIVE, WAITING, TREE_FINAL, TEXT_DISPLAY
-            gestureMode: 'NONE', // NONE, WO, NI, YES, HEART
-            
-            // 平滑系统核心变量
+            mode: 'LOADING',
+            gestureMode: 'NONE', 
             targetRot: { x: 0, y: 0 },
             currentRot: { x: 0, y: 0 },
-            
             hand: { detected: false, x: 0, y: 0, fingers: 0 }, 
             face: { detected: false, noseY: [] },
-            
-            cameraAvailable: false // 标记摄像头是否可用
+            cameraAvailable: false
         };
 
-        const VIZ = { count: 1800, treeH: 26, treeR: 9, scatterR: 45 };
+        const VIZ = { count: 1800, treeH: 26, treeR: 9, scatterR: 45, snowCount: 800 };
 
         let scene, camera, renderer, composer;
-        let mainGroup, particleSystem = [], photoGroup;
+        let mainGroup, particleSystem = [], photoGroup, snowSystem;
         let handLandmarker, faceLandmarker, video;
         let clock = new THREE.Clock();
-        
-        // 坐标缓存
         const GESTURE_TARGETS = { WO: [], NI: [], YES: [], HEART: [], TEMP_TEXT: [] };
+
+        // 录制相关
+        let mediaRecorder;
+        let recordedChunks = [];
+        let isRecording = false;
+
+        // 模拟进度条
+        let loadProgress = 0;
+        const progressInterval = setInterval(() => {
+            if (loadProgress < 90) { loadProgress += Math.random() * 5; updateProgressBar(loadProgress); }
+        }, 200);
+
+        function updateProgressBar(val) { document.getElementById('progress-bar').style.width = val + '%'; }
 
         async function init() {
             initThree();
+            createSnow(); // [修改 1] 增加雪花
             preCalculateGestures();
             createParticles();
             createPhoto();
             setupPostProcessing();
             
-            // 容错处理：尝试启动摄像头，如果失败则静默降级
             try {
                 await initMediaPipe();
                 STATE.cameraAvailable = true;
-                document.getElementById('webcam-hud').classList.add('active'); // 显示小窗
             } catch (e) {
-                console.warn("Camera Init Failed or Denied:", e);
-                STATE.cameraAvailable = false;
-                document.querySelector('.gesture-hint').innerHTML = "摄像头未授权<br>已切换至纯展示模式";
+                console.warn("Camera fallback");
             }
-
             initMQTT();
 
-            document.getElementById('loader').style.opacity = 0;
-            setTimeout(() => document.getElementById('loader').remove(), 800);
-            
+            clearInterval(progressInterval);
+            updateProgressBar(100);
+            setTimeout(() => { document.getElementById('open-btn').classList.add('ready'); }, 500);
+
             window.enterQuantumMode = enterQuantumMode;
             window.returnToInteractive = returnToInteractive;
+            window.openGift = openGift;
+            window.toggleHud = toggleHud;
+            window.toggleRecording = toggleRecording;
             
             animate();
         }
 
-        // [视觉核心] Grand Luxury
+        // [修改 2] HUD 开关
+        function toggleHud(el) {
+            el.classList.toggle('minimized');
+        }
+
+        // [修改 3] 录制功能
+        function toggleRecording() {
+            if (!isRecording) {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        }
+
+        function startRecording() {
+            const canvas = document.querySelector('canvas');
+            const stream = canvas.captureStream(30); // 30 FPS
+            
+            // 尝试支持的格式
+            let options = { mimeType: 'video/webm;codecs=vp9' };
+            if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                options = { mimeType: 'video/webm' };
+            }
+
+            try {
+                mediaRecorder = new MediaRecorder(stream, options);
+            } catch (e) {
+                alert("当前浏览器不支持录制");
+                return;
+            }
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) recordedChunks.push(event.data);
+            };
+
+            mediaRecorder.onstop = saveVideo;
+            mediaRecorder.start();
+            isRecording = true;
+            document.getElementById('record-btn').classList.add('recording');
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+            isRecording = false;
+            document.getElementById('record-btn').classList.remove('recording');
+        }
+
+        function saveVideo() {
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            document.body.appendChild(a);
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `Christmas_Memory_${Date.now()}.webm`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+            recordedChunks = [];
+        }
+
+        function openGift() {
+            const bgm = document.getElementById('bgm');
+            if (CFG.assets.bgmUrl) bgm.src = CFG.assets.bgmUrl;
+            bgm.play().catch(e => console.log("BGM Play Error:", e));
+            bgm.volume = 0.5;
+
+            document.getElementById('gift-layer').style.opacity = 0;
+            setTimeout(() => {
+                document.getElementById('gift-layer').style.display = 'none';
+                STATE.mode = 'INTERACTIVE';
+                if(STATE.cameraAvailable) document.getElementById('webcam-hud').classList.add('active');
+            }, 1500);
+        }
+
         function initThree() {
             const container = document.getElementById('canvas-container');
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x000000);
-            scene.fog = new THREE.FogExp2(0x000000, 0.015);
+            scene.fog = new THREE.FogExp2(0x000000, 0.02); // 雾效配合雪花
 
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 2, 45);
+            adjustCameraForMobile();
 
-            renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+            renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance", preserveDrawingBuffer: true }); // preserveDrawingBuffer for recording
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            renderer.toneMappingExposure = 1.1;
+            renderer.toneMappingExposure = 1.2;
             container.appendChild(renderer.domElement);
 
             const pmremGenerator = new THREE.PMREMGenerator(renderer);
@@ -214,7 +343,44 @@
             scene.add(spotLight);
         }
 
-        // 坐标生成逻辑 (保持不变)
+        // [修改 1] 创建雪花
+        function createSnow() {
+            const snowGeo = new THREE.BufferGeometry();
+            const snowPos = [];
+            for (let i = 0; i < VIZ.snowCount; i++) {
+                snowPos.push(
+                    (Math.random() - 0.5) * 100, // x
+                    (Math.random() - 0.5) * 60 + 20, // y
+                    (Math.random() - 0.5) * 80 - 20 // z (偏向背景)
+                );
+            }
+            snowGeo.setAttribute('position', new THREE.Float32BufferAttribute(snowPos, 3));
+            const snowMat = new THREE.PointsMaterial({
+                color: 0xffffff, size: 0.3, transparent: true, opacity: 0.6,
+                blending: THREE.AdditiveBlending
+            });
+            snowSystem = new THREE.Points(snowGeo, snowMat);
+            scene.add(snowSystem);
+        }
+
+        function updateSnow() {
+            if (!snowSystem) return;
+            const positions = snowSystem.geometry.attributes.position.array;
+            for (let i = 1; i < positions.length; i += 3) {
+                positions[i] -= 0.05; // 下落
+                if (positions[i] < -20) positions[i] = 40; // 循环
+            }
+            snowSystem.geometry.attributes.position.needsUpdate = true;
+            snowSystem.rotation.y += 0.001; // 整体旋转
+        }
+
+        function adjustCameraForMobile() {
+            const aspect = window.innerWidth / window.innerHeight;
+            if (aspect < 0.8) camera.position.set(0, 2, 70); 
+            else camera.position.set(0, 2, 45);
+        }
+
+        // ... (省略 text, heart 坐标生成函数，与上版一致，直接复用即可) ...
         function generateTextCoordinates(text, fontSize = 60, density = 2) {
             const canvas = document.createElement('canvas');
             const size = 128; canvas.width = size; canvas.height = size;
@@ -227,14 +393,11 @@
             const coords = [];
             for(let y=0; y<size; y+=density) {
                 for(let x=0; x<size; x+=density) {
-                    if (data[(y*size + x)*4] > 128) {
-                        coords.push(new THREE.Vector3((x - size/2)*0.25, (size/2 - y)*0.25 + 5, 0));
-                    }
+                    if (data[(y*size + x)*4] > 128) coords.push(new THREE.Vector3((x - size/2)*0.25, (size/2 - y)*0.25 + 5, 0));
                 }
             }
             return coords;
         }
-
         function generateHeartShape(count) {
             const coords = [];
             for (let i = 0; i < count; i++) {
@@ -291,15 +454,10 @@
                 let targetColor = this.origColor; 
 
                 if (STATE.mode === 'INTERACTIVE') {
-                    // 使用 Lerp 后的平滑值来调整树的整体形态 (微弱呼吸)
-                    
                     if (STATE.gestureMode === 'WO') { target = GESTURE_TARGETS.WO[index % GESTURE_TARGETS.WO.length]; speed = 4.0; } 
                     else if (STATE.gestureMode === 'NI') { target = GESTURE_TARGETS.NI[index % GESTURE_TARGETS.NI.length]; speed = 4.0; }
                     else if (STATE.gestureMode === 'YES') { target = GESTURE_TARGETS.YES[index % GESTURE_TARGETS.YES.length]; speed = 4.0; }
-                    else if (STATE.gestureMode === 'HEART') {
-                        target = GESTURE_TARGETS.HEART[index % GESTURE_TARGETS.HEART.length];
-                        speed = 6.0; targetColor = new THREE.Color(0xff0000); 
-                    }
+                    else if (STATE.gestureMode === 'HEART') { target = GESTURE_TARGETS.HEART[index % GESTURE_TARGETS.HEART.length]; speed = 6.0; targetColor = new THREE.Color(0xff0000); }
                 } else if (STATE.mode === 'WAITING') {
                     target = this.posScatter; speed = 0.8;
                     this.mesh.rotation.x+=dt*0.5; this.mesh.rotation.y+=dt*0.5;
@@ -310,30 +468,17 @@
                     else { target = this.posScatter; scale = 0; }
                 }
 
-                // 核心：使用 dt * speed 进行平滑插值
                 this.mesh.position.lerp(target, speed*dt);
                 this.mesh.material.color.lerp(targetColor, dt * 5);
-                
-                if (this.type==='GOLD') { 
-                    const p=0.8+0.4*Math.sin(clock.elapsedTime*3+this.randomOffset*10); 
-                    this.mesh.scale.setScalar(scale*p); 
-                } else { this.mesh.scale.setScalar(scale); }
+                if (this.type==='GOLD') { const p=0.8+0.4*Math.sin(clock.elapsedTime*3+this.randomOffset*10); this.mesh.scale.setScalar(scale*p); } 
+                else { this.mesh.scale.setScalar(scale); }
             }
         }
 
         function createParticles() {
-            const matGold = new THREE.MeshStandardMaterial({ 
-                color: 0xffd700, metalness: 1.0, roughness: 0.1, 
-                emissive: 0x442200, emissiveIntensity: 0.2 
-            });
-            const matGreen = new THREE.MeshStandardMaterial({ 
-                color: 0x053010, metalness: 0.3, roughness: 0.6,
-                emissive: 0x001100, emissiveIntensity: 0.1 
-            });
-            const matRed = new THREE.MeshPhysicalMaterial({
-                color: 0xaa0000, metalness: 0.2, roughness: 0.1, 
-                clearcoat: 1.0, emissive: 0x330000, emissiveIntensity: 0.3
-            });
+            const matGold = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 1.0, roughness: 0.1, emissive: 0x442200, emissiveIntensity: 0.2 });
+            const matGreen = new THREE.MeshStandardMaterial({ color: 0x053010, metalness: 0.3, roughness: 0.6, emissive: 0x001100, emissiveIntensity: 0.1 });
+            const matRed = new THREE.MeshPhysicalMaterial({ color: 0xaa0000, metalness: 0.2, roughness: 0.1, clearcoat: 1.0, emissive: 0x330000, emissiveIntensity: 0.3 });
             
             const boxGeo = new THREE.BoxGeometry(0.35,0.35,0.35); const sphereGeo=new THREE.SphereGeometry(0.2,16,16);
             for(let i=0;i<VIZ.count;i++){
@@ -349,7 +494,6 @@
 
         function createPhoto() {
             photoGroup = new THREE.Group();
-            // 容错图片
             const url = CFG.assets.photoUrl || "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
             new THREE.TextureLoader().load(url, (tex) => {
                 tex.colorSpace = THREE.SRGBColorSpace;
@@ -358,46 +502,38 @@
                 const frame = new THREE.Mesh(new THREE.BoxGeometry(w+0.4,h+0.4,0.2), new THREE.MeshStandardMaterial({color:0xffd700,metalness:1,roughness:0.1}));
                 const pic = new THREE.Mesh(new THREE.PlaneGeometry(w,h), new THREE.MeshBasicMaterial({map:tex}));
                 pic.position.z=0.11; photoGroup.add(frame,pic);
-            }, undefined, (err) => {
-                console.log("Photo load failed, using placeholder");
-            });
+            }, undefined, ()=>{ console.log("Photo fallback"); });
             photoGroup.visible=false; photoGroup.scale.set(0,0,0); photoGroup.position.set(0,5,0); mainGroup.add(photoGroup);
         }
 
-        // === 模式切换 ===
         function enterQuantumMode() {
-            STATE.mode = 'WAITING';
-            STATE.gestureMode = 'NONE';
+            STATE.mode = 'WAITING'; STATE.gestureMode = 'NONE';
             document.getElementById('ui-interactive').classList.add('ui-hidden');
             document.getElementById('quantum-btn').classList.add('ui-hidden');
             document.getElementById('ui-waiting').style.opacity = 1;
             document.getElementById('return-btn').classList.add('active');
-            document.getElementById('webcam-hud').classList.remove('active'); // 隐藏摄像头窗口
+            document.getElementById('webcam-hud').classList.remove('active'); 
             photoGroup.visible = false; photoGroup.scale.set(0,0,0);
             document.getElementById('ui-final').style.opacity = 0;
+            // [录制功能] 停止录制如果正在录
+            if(isRecording) stopRecording();
+            document.getElementById('record-btn').style.display = 'none'; // 隐藏录制按钮
         }
 
         function returnToInteractive() {
-            STATE.mode = 'INTERACTIVE';
-            STATE.gestureMode = 'NONE';
+            STATE.mode = 'INTERACTIVE'; STATE.gestureMode = 'NONE';
             document.getElementById('ui-interactive').classList.remove('ui-hidden');
             document.getElementById('quantum-btn').classList.remove('ui-hidden');
             document.getElementById('ui-waiting').style.opacity = 0;
             document.getElementById('ui-final').style.opacity = 0;
             document.getElementById('return-btn').classList.remove('active');
-            if(STATE.cameraAvailable) document.getElementById('webcam-hud').classList.add('active'); // 恢复摄像头窗口
-            camera.position.set(0, 2, 45);
+            if(STATE.cameraAvailable) document.getElementById('webcam-hud').classList.add('active'); 
+            adjustCameraForMobile(); 
             photoGroup.visible = false; photoGroup.scale.set(0,0,0);
+            document.getElementById('record-btn').style.display = 'flex'; // 显示录制按钮
         }
 
         function handleCommand(cmd) {
-            const bgm = document.getElementById('bgm');
-            // 尝试播放音乐 (容错)
-            if (bgm.paused && CFG.assets.bgmUrl) { 
-                bgm.src = CFG.assets.bgmUrl; 
-                bgm.play().catch(e=>{ console.log("Audio play prevented"); }); 
-            }
-            
             document.getElementById('ui-waiting').classList.add('ui-hidden');
             if (cmd === 'love') {
                 STATE.mode = 'TREE_FINAL';
@@ -420,20 +556,10 @@
             client.on('message', (t, m) => { try { const d=JSON.parse(m.toString()); if(d.cmd) handleCommand(d.cmd); } catch(e){} });
         }
 
-        // === 视觉识别 (MediaPipe) ===
         async function initMediaPipe() {
             const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
-            
-            handLandmarker = await HandLandmarker.createFromOptions(vision, {
-                baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" },
-                runningMode: "VIDEO", numHands: 1
-            });
-
-            faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-                baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" },
-                runningMode: "VIDEO", numFaces: 1
-            });
-
+            handLandmarker = await HandLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" }, runningMode: "VIDEO", numHands: 1 });
+            faceLandmarker = await FaceLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" }, runningMode: "VIDEO", numFaces: 1 });
             video = document.getElementById('webcam');
             if (navigator.mediaDevices?.getUserMedia) {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -444,12 +570,8 @@
         
         function countFingers(lm) {
             let count = 0;
-            // 简单的手指伸展检测逻辑
             if (lm[4].x < lm[3].x) count++; 
-            if (lm[8].y < lm[6].y) count++; 
-            if (lm[12].y < lm[10].y) count++; 
-            if (lm[16].y < lm[14].y) count++; 
-            if (lm[20].y < lm[18].y) count++; 
+            if (lm[8].y < lm[6].y) count++; if (lm[12].y < lm[10].y) count++; if (lm[16].y < lm[14].y) count++; if (lm[20].y < lm[18].y) count++; 
             return count;
         }
 
@@ -467,43 +589,39 @@
             if (video.currentTime !== lastVideoTime) {
                 lastVideoTime = video.currentTime;
                 const now = performance.now();
-                
-                // === 手势检测 ===
                 if (handLandmarker) {
                     const res = handLandmarker.detectForVideo(video, now);
                     if (res.landmarks.length > 0) {
                         STATE.hand.detected = true;
                         const lm = res.landmarks[0];
-                        
-                        // [关键优化] 目标值设定 (不直接赋值给 rot)
-                        STATE.targetRot.x = (lm[9].y - 0.5) * 2;
-                        STATE.targetRot.y = (lm[9].x - 0.5) * -2; 
-
+                        STATE.targetRot.x = (lm[9].y - 0.5) * 2; STATE.targetRot.y = (lm[9].x - 0.5) * -2; 
                         const fingers = countFingers(lm);
-                        // 防抖动逻辑：只有明确的手势才切换
                         if (fingers === 5) STATE.gestureMode = 'WO';
                         else if (fingers === 1) STATE.gestureMode = 'NI';
                         else if (fingers === 0) STATE.gestureMode = 'HEART';
                         else STATE.gestureMode = 'NONE';
                     } else {
-                        STATE.hand.detected = false;
-                        STATE.targetRot.x = 0; STATE.targetRot.y = 0; // 手离开时回正
+                        STATE.hand.detected = false; STATE.targetRot.x = 0; STATE.targetRot.y = 0; 
                         if (STATE.gestureMode !== 'YES') STATE.gestureMode = 'NONE';
                     }
                 }
-
-                // === 面部检测 ===
                 if (faceLandmarker) {
                     const res = faceLandmarker.detectForVideo(video, now);
                     if (res.faceLandmarks.length > 0) {
-                        if (detectNod(res.faceLandmarks[0])) {
-                            STATE.gestureMode = 'YES';
-                            setTimeout(() => { if(STATE.gestureMode === 'YES') STATE.gestureMode = 'NONE'}, 2000);
-                        }
+                        if (detectNod(res.faceLandmarks[0])) { STATE.gestureMode = 'YES'; setTimeout(() => { if(STATE.gestureMode === 'YES') STATE.gestureMode = 'NONE'}, 2000); }
                     }
                 }
+                updateIcons();
             }
             requestAnimationFrame(predictWebcam);
+        }
+
+        function updateIcons() {
+            document.querySelectorAll('.icon-box').forEach(el => el.classList.remove('active'));
+            if (STATE.gestureMode === 'WO') document.getElementById('icon-wo').classList.add('active');
+            else if (STATE.gestureMode === 'NI') document.getElementById('icon-ni').classList.add('active');
+            else if (STATE.gestureMode === 'HEART') document.getElementById('icon-heart').classList.add('active');
+            else if (STATE.gestureMode === 'YES') document.getElementById('icon-yes').classList.add('active');
         }
 
         function setupPostProcessing() {
@@ -517,32 +635,21 @@
         function animate() {
             requestAnimationFrame(animate);
             const dt = clock.getDelta();
-            
-            // [关键优化] 丝滑平滑插值 (Smoothing)
-            // 无论任何模式，主群组的旋转都使用 Lerp 逼近目标值
-            const smoothFactor = 3.0 * dt; // 阻尼系数
+            const smoothFactor = 3.0 * dt;
             STATE.currentRot.x += (STATE.targetRot.x - STATE.currentRot.x) * smoothFactor;
             STATE.currentRot.y += (STATE.targetRot.y - STATE.currentRot.y) * smoothFactor;
 
+            // [修改 1] 更新雪花
+            if(snowSystem) updateSnow();
+
             if (STATE.mode === 'INTERACTIVE') {
                 if (STATE.hand.detected && STATE.gestureMode === 'NONE') {
-                    // 手势控制时，应用平滑后的旋转值
-                    mainGroup.rotation.y = STATE.currentRot.y;
-                    mainGroup.rotation.x = STATE.currentRot.x;
+                    mainGroup.rotation.y = STATE.currentRot.y; mainGroup.rotation.x = STATE.currentRot.x;
                 } else {
-                    // 自动回正
-                    STATE.targetRot.x = 0; 
-                    STATE.targetRot.y += 0.05 * dt; // 极慢的自转
-                    mainGroup.rotation.y += 0.2 * dt; // 叠加一点自转
-                    mainGroup.rotation.x *= 0.95;
+                    STATE.targetRot.x = 0; STATE.targetRot.y += 0.05 * dt; 
+                    mainGroup.rotation.y += 0.2 * dt; mainGroup.rotation.x *= 0.95;
                 }
-                
-                // 特殊手势下，强制回正以便观看文字
-                if(STATE.gestureMode !== 'NONE') { 
-                    mainGroup.rotation.y *= 0.95; 
-                    mainGroup.rotation.x *= 0.95; 
-                }
-
+                if(STATE.gestureMode !== 'NONE') { mainGroup.rotation.y *= 0.95; mainGroup.rotation.x *= 0.95; }
             } else if (STATE.mode === 'WAITING') {
                 mainGroup.rotation.y += 0.05 * dt; camera.position.z = THREE.MathUtils.lerp(camera.position.z, 60, dt);
             } else if (STATE.mode === 'TREE_FINAL') {
@@ -556,7 +663,15 @@
             particleSystem.forEach((p,i) => p.update(dt, i));
             composer.render();
         }
-        window.addEventListener('resize', () => { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth,window.innerHeight); composer.setSize(window.innerWidth,window.innerHeight); });
+
+        window.addEventListener('resize', () => { 
+            camera.aspect = window.innerWidth/window.innerHeight; 
+            camera.updateProjectionMatrix(); 
+            renderer.setSize(window.innerWidth,window.innerHeight); 
+            composer.setSize(window.innerWidth,window.innerHeight); 
+            adjustCameraForMobile(); 
+        });
+        
         init();
     </script>
 </body>
