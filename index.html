@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOVE 接收端</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        body { 
+            display: flex; justify-content: center; align-items: center; 
+            height: 100vh; margin: 0; background-color: #000; color: white; 
+            font-family: sans-serif; transition: background-color 0.5s;
+        }
+        #message { font-size: 24px; opacity: 0.8; }
+        /* 简单的全屏爱心动画层 */
+        #overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            display: none; pointer-events: none;
+            background: url('https://img.icons8.com/emoji/96/000000/heart-suit.png') center no-repeat;
+            background-size: 50%;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="message">等待信号中...</div>
+    <div id="overlay"></div>
+
+    <script>
+        const options = {
+            host: 'broker.emqx.io',
+            port: 8084,
+            protocol: 'wss',
+            path: '/mqtt', // 关键点
+            clientId: 'gf_receiver_' + Math.random().toString(16).substring(2, 8)
+        };
+
+        const topic = 'may_visual/test/520'; 
+
+        const client = mqtt.connect(options);
+        const msgDiv = document.getElementById('message');
+
+        client.on('connect', () => {
+            console.log('接收端已连接');
+            msgDiv.innerText = '等待那个人的指令...';
+            // 订阅话题
+            client.subscribe(topic, (err) => {
+                if (!err) {
+                    console.log('订阅成功:', topic);
+                }
+            });
+        });
+
+        // 监听消息
+        client.on('message', (topic, message) => {
+            // 将二进制数据转为字符串
+            const msgStr = message.toString();
+            console.log('收到消息:', msgStr);
+
+            try {
+                const data = JSON.parse(msgStr);
+                if (data.cmd === 'love') {
+                    triggerEffect(); // 触发特效
+                }
+            } catch (e) {
+                console.error('JSON解析失败', e);
+            }
+        });
+
+        // 触发特效函数 (您后面把这里替换成粒子代码即可)
+        function triggerEffect() {
+            // 1. 改字
+            msgDiv.innerText = "❤ 他正在想你 ❤";
+            // 2. 改背景
+            document.body.style.backgroundColor = "#ff7979";
+            // 3. 显示爱心层
+            const overlay = document.getElementById('overlay');
+            overlay.style.display = 'block';
+            
+            // 3秒后还原
+            setTimeout(() => {
+                document.body.style.backgroundColor = "#000";
+                msgDiv.innerText = "等待那个人的指令...";
+                overlay.style.display = 'none';
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

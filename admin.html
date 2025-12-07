@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOVE 指挥官控制台</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        body { 
+            display: flex; flex-direction: column; justify-content: center; align-items: center; 
+            height: 100vh; margin: 0; background-color: #f0f0f0; font-family: sans-serif;
+        }
+        #btn {
+            width: 200px; height: 200px; border-radius: 50%; border: none;
+            background: linear-gradient(145deg, #ff5e62, #ff9966); /* 换个更显眼的颜色 */
+            color: white; font-size: 24px; cursor: pointer;
+            box-shadow: 0 10px 25px rgba(255, 94, 98, 0.5);
+        }
+        #btn:active { transform: scale(0.95); }
+        #status { margin-top: 20px; color: #333; font-weight: bold;}
+    </style>
+</head>
+<body>
+
+    <button id="btn" onclick="sendLove()">❤ 点击发射 ❤</button>
+    <div id="status">正在连接卫星...</div>
+
+    <script>
+        // 1. 连接配置
+        const options = {
+            host: 'broker.emqx.io',
+            port: 8084,
+            protocol: 'wss',
+            path: '/mqtt',
+            clientId: 'sender_' + Math.random().toString(16).substring(2, 8)
+        };
+
+        // 2. ！！！核心修正点：必须和接收端完全一致！！！
+        const topic = 'may_visual/test/520'; 
+
+        const client = mqtt.connect(options);
+        const statusDiv = document.getElementById('status');
+
+        client.on('connect', () => {
+            console.log('控制端已连接');
+            statusDiv.innerText = '● 信号已锁定 (Ready)';
+            statusDiv.style.color = 'green';
+        });
+
+        function sendLove() {
+            if (!client.connected) {
+                alert('还没连上服务器，稍等一秒！');
+                return;
+            }
+            // 发送最简单的指令，不带时间戳，防止解析错误
+            const message = JSON.stringify({ cmd: "love" });
+            
+            client.publish(topic, message);
+            console.log('已向频道 ' + topic + ' 发送:', message);
+            
+            // 按钮反馈
+            const btn = document.getElementById('btn');
+            btn.innerText = "已发送!";
+            setTimeout(() => btn.innerText = "❤ 点击发射 ❤", 1000);
+        }
+    </script>
+</body>
+</html>
