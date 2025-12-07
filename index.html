@@ -2,125 +2,562 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>量子纠缠接收端</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Visual Alchemy - Silk & Gold</title>
+    
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="config.js"></script>
+
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #000; /* 默认黑底 */
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            font-family: 'PingFang SC', sans-serif;
-            transition: background-color 0.5s ease;
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Times New Roman', serif; }
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+        
+        /* UI 层 */
+        .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; transition: opacity 0.8s ease; }
+        .ui-hidden { opacity: 0 !important; pointer-events: none !important; }
+        .clickable { pointer-events: auto; cursor: pointer; }
+
+        /* UI 1: 互动界面 */
+        #ui-interactive { display: flex; flex-direction: column; align-items: center; padding-top: 5vh; }
+        h1 { 
+            color: #fceea7; font-size: 36px; margin: 0; letter-spacing: 4px; 
+            text-shadow: 0 0 40px rgba(252, 238, 167, 0.6); 
+            font-family: 'Cinzel', serif; text-transform: uppercase;
+            background: linear-gradient(to bottom, #fff, #ffcc00); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
-        #container {
-            text-align: center;
+        .gesture-hint { 
+            color: rgba(255,215,0,0.8); font-size: 11px; margin-top: 15px; letter-spacing: 2px; text-align: center; line-height: 1.8; 
+            text-transform: uppercase; text-shadow: 0 0 5px rgba(255,215,0,0.3);
+            background: rgba(0,0,0,0.4); padding: 10px 20px; border-radius: 20px; border: 1px solid rgba(255,215,0,0.2);
         }
-        h1 {
-            font-size: 24px;
-            margin-bottom: 30px;
-            color: #888;
+
+        /* 按钮组 */
+        .btn-group-right { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 20px; align-items: flex-end; }
+        
+        /* 回到灵气按钮 */
+        .return-btn {
+            writing-mode: vertical-rl; text-orientation: mixed;
+            background: rgba(80, 0, 0, 0.6); border: 1px solid rgba(255, 50, 50, 0.6);
+            color: #ffcccc; padding: 15px 10px; font-size: 12px; letter-spacing: 3px;
+            backdrop-filter: blur(10px); transition: all 0.5s;
+            box-shadow: 0 0 15px rgba(255, 0, 0, 0.3);
+            border-radius: 4px; opacity: 0; pointer-events: none; transform: translateX(50px);
         }
-        #status {
-            font-size: 20px;
-            margin-bottom: 20px;
+        .return-btn.active { opacity: 1; pointer-events: auto; transform: translateX(0); }
+        .return-btn:hover { background: #ff3333; color: #fff; box-shadow: 0 0 30px rgba(255, 0, 0, 0.8); }
+
+        /* 粒子纠缠按钮 */
+        .quantum-btn {
+            writing-mode: vertical-rl; text-orientation: mixed;
+            background: rgba(10, 10, 10, 0.7); border: 1px solid rgba(212, 175, 55, 0.6);
+            color: #d4af37; padding: 20px 12px; font-size: 13px; letter-spacing: 4px;
+            backdrop-filter: blur(10px); transition: all 0.5s;
+            box-shadow: 0 0 20px rgba(212, 175, 55, 0.2); border-radius: 4px;
         }
-        #love-img {
-            width: 150px;
-            height: 150px;
-            object-fit: contain;
-            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        .quantum-btn:hover { background: #d4af37; color: #000; box-shadow: 0 0 40px rgba(212, 175, 55, 0.8); border-color: #fff; }
+
+        /* UI 2 & 3 */
+        #ui-waiting { opacity: 0; display: flex; justify-content: center; align-items: center; }
+        .status-text { color: #fff; font-size: 14px; letter-spacing: 6px; animation: breathe 3s infinite ease-in-out; text-shadow: 0 0 10px rgba(255,255,255,0.5); }
+        @keyframes breathe { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+        #ui-final { opacity: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; padding-bottom: 80px; }
+        .final-msg { color: #d4af37; font-size: 22px; font-weight: bold; text-shadow: 0 0 25px rgba(212, 175, 55, 0.9); transform: translateY(20px); transition: all 1s; font-family: 'Cinzel', serif; }
+
+        #loader { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 100; display: flex; justify-content: center; align-items: center; transition: opacity 0.8s; }
+        .spinner { width: 50px; height: 50px; border: 1px solid #333; border-top: 1px solid #d4af37; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* 摄像头小窗 (HUD) */
+        #webcam-hud { 
+            position: absolute; bottom: 20px; right: 20px; width: 160px; height: 120px; 
+            border: 1px solid rgba(212,175,55,0.3); border-radius: 8px; overflow: hidden;
+            z-index: 20; opacity: 0; transition: opacity 0.5s; pointer-events: none;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
         }
-        /* 心跳动画类 */
-        .heartbeat {
-            animation: pulse 1s infinite;
-        }
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.3); }
-            100% { transform: scale(1); }
-        }
+        #webcam-hud.active { opacity: 0.6; }
+        #webcam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); /* 镜像 */ }
+
     </style>
+    <style>@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap');</style>
+    <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/", "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/+esm" } }</script>
 </head>
 <body>
+    <!-- 占位音频，防止报错 -->
+    <audio id="bgm" loop preload="auto"></audio>
+    
+    <div id="loader"><div class="spinner"></div></div>
+    <div id="canvas-container"></div>
 
-    <div id="container">
-        <h1 id="couple-name">Loading...</h1>
-        
-        <img id="love-img" src="" alt="Love Image">
-        
-        <p id="status">Connecting...</p>
+    <!-- UI 1: 互动模式 -->
+    <div id="ui-interactive" class="ui-layer">
+        <h1>Merry Christmas</h1>
+        <div class="gesture-hint">
+            🖐 张开=我 | ☝️ 单指=你 | ✊ 握拳=红心<br>
+            😐 点头=YES | 👋 移动手掌旋转视角
+        </div>
     </div>
 
-    <script>
-        // 1. 初始化界面内容
-        document.getElementById('couple-name').innerText = CONFIG.business.coupleName;
-        document.getElementById('love-img').src = CONFIG.assets.photoUrl;
-        document.getElementById('status').innerText = CONFIG.business.statusText;
+    <!-- 右侧按钮组 -->
+    <div class="btn-group-right ui-layer clickable">
+        <div id="return-btn" class="return-btn clickable" onclick="returnToInteractive()">
+            ⟲ 回到灵气
+        </div>
+        <div id="quantum-btn" class="quantum-btn clickable" onclick="enterQuantumMode()">
+            看看他想说什么？
+        </div>
+    </div>
 
-        // 2. 连接 MQTT
-        const client = mqtt.connect(CONFIG.mqtt.host, {
-            username: CONFIG.mqtt.username,
-            password: CONFIG.mqtt.password,
-            clientId: CONFIG.mqtt.clientId + "_receiver" // 区分接收端ID
-        });
+    <!-- UI 2: 等待模式 -->
+    <div id="ui-waiting" class="ui-layer"><div class="status-text">WAITING FOR LOVE SIGNAL...</div></div>
+    <!-- UI 3: 最终展示 -->
+    <div id="ui-final" class="ui-layer"><div class="final-msg" id="final-msg"></div></div>
+    
+    <!-- 摄像头 HUD -->
+    <div id="webcam-hud"><video id="webcam" autoplay playsinline muted></video></div>
 
-        // 3. 连接成功回调
-        client.on('connect', () => {
-            console.log('接收端已连接 EMQX');
-            client.subscribe(CONFIG.business.topic, (err) => {
-                if (!err) {
-                    console.log(`监听频道成功: ${CONFIG.business.topic}`);
-                }
-            });
-        });
+    <script type="module">
+        import * as THREE from 'three';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+        import { FilesetResolver, HandLandmarker, FaceLandmarker } from '@mediapipe/tasks-vision';
 
-        // 4. 收到消息回调
-        client.on('message', (topic, message) => {
-            if (topic === CONFIG.business.topic) {
-                const msgStr = message.toString();
-                console.log('收到消息:', msgStr);
-                
-                try {
-                    const data = JSON.parse(msgStr);
-                    if (data.cmd === "love") {
-                        triggerLoveEffect();
+        // === 配置与状态 ===
+        const CFG = window.CONFIG || { business: { coupleName: "May & Commander", topic: "test" }, assets: { photoUrl: "", bgmUrl: "" } };
+
+        const STATE = {
+            mode: 'INTERACTIVE', // INTERACTIVE, WAITING, TREE_FINAL, TEXT_DISPLAY
+            gestureMode: 'NONE', // NONE, WO, NI, YES, HEART
+            
+            // 平滑系统核心变量
+            targetRot: { x: 0, y: 0 },
+            currentRot: { x: 0, y: 0 },
+            
+            hand: { detected: false, x: 0, y: 0, fingers: 0 }, 
+            face: { detected: false, noseY: [] },
+            
+            cameraAvailable: false // 标记摄像头是否可用
+        };
+
+        const VIZ = { count: 1800, treeH: 26, treeR: 9, scatterR: 45 };
+
+        let scene, camera, renderer, composer;
+        let mainGroup, particleSystem = [], photoGroup;
+        let handLandmarker, faceLandmarker, video;
+        let clock = new THREE.Clock();
+        
+        // 坐标缓存
+        const GESTURE_TARGETS = { WO: [], NI: [], YES: [], HEART: [], TEMP_TEXT: [] };
+
+        async function init() {
+            initThree();
+            preCalculateGestures();
+            createParticles();
+            createPhoto();
+            setupPostProcessing();
+            
+            // 容错处理：尝试启动摄像头，如果失败则静默降级
+            try {
+                await initMediaPipe();
+                STATE.cameraAvailable = true;
+                document.getElementById('webcam-hud').classList.add('active'); // 显示小窗
+            } catch (e) {
+                console.warn("Camera Init Failed or Denied:", e);
+                STATE.cameraAvailable = false;
+                document.querySelector('.gesture-hint').innerHTML = "摄像头未授权<br>已切换至纯展示模式";
+            }
+
+            initMQTT();
+
+            document.getElementById('loader').style.opacity = 0;
+            setTimeout(() => document.getElementById('loader').remove(), 800);
+            
+            window.enterQuantumMode = enterQuantumMode;
+            window.returnToInteractive = returnToInteractive;
+            
+            animate();
+        }
+
+        // [视觉核心] Grand Luxury
+        function initThree() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000000);
+            scene.fog = new THREE.FogExp2(0x000000, 0.015);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 2, 45);
+
+            renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.1;
+            container.appendChild(renderer.domElement);
+
+            const pmremGenerator = new THREE.PMREMGenerator(renderer);
+            scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+
+            mainGroup = new THREE.Group();
+            scene.add(mainGroup);
+
+            const ambient = new THREE.AmbientLight(0xffffff, 0.2);
+            scene.add(ambient);
+            const innerLight = new THREE.PointLight(0xffaa00, 3, 30);
+            innerLight.position.set(0, 10, 0);
+            mainGroup.add(innerLight);
+            const spotLight = new THREE.SpotLight(0xffeebb, 150);
+            spotLight.position.set(25, 30, 25);
+            spotLight.angle = 0.6;
+            spotLight.penumbra = 0.5;
+            scene.add(spotLight);
+        }
+
+        // 坐标生成逻辑 (保持不变)
+        function generateTextCoordinates(text, fontSize = 60, density = 2) {
+            const canvas = document.createElement('canvas');
+            const size = 128; canvas.width = size; canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#000'; ctx.fillRect(0,0,size,size);
+            ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.font = `bold ${fontSize}px "Microsoft YaHei", sans-serif`; 
+            ctx.fillText(text, size/2, size/2);
+            const data = ctx.getImageData(0,0,size,size).data;
+            const coords = [];
+            for(let y=0; y<size; y+=density) {
+                for(let x=0; x<size; x+=density) {
+                    if (data[(y*size + x)*4] > 128) {
+                        coords.push(new THREE.Vector3((x - size/2)*0.25, (size/2 - y)*0.25 + 5, 0));
                     }
-                } catch (e) {
-                    console.error("解析错误", e);
                 }
             }
-        });
-
-        // 5. 触发爱心特效函数
-        function triggerLoveEffect() {
-            const body = document.body;
-            const status = document.getElementById('status');
-            const img = document.getElementById('love-img');
-
-            // 改变状态
-            status.innerText = CONFIG.business.successText;
-            
-            // 背景变粉
-            body.style.backgroundColor = "#ffb7b2";
-            
-            // 图片添加心跳动画
-            img.classList.add("heartbeat");
-            
-            // (可选) 3秒后恢复平静，方便下一次互动
-            setTimeout(() => {
-                body.style.backgroundColor = "#000";
-                img.classList.remove("heartbeat");
-                status.innerText = CONFIG.business.statusText;
-            }, 3000);
+            return coords;
         }
+
+        function generateHeartShape(count) {
+            const coords = [];
+            for (let i = 0; i < count; i++) {
+                const t = Math.random() * Math.PI * 2;
+                const x = 16 * Math.pow(Math.sin(t), 3);
+                const y = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
+                const z = (Math.random() - 0.5) * 5; 
+                coords.push(new THREE.Vector3(x * 0.12, y * 0.12 + 6, z));
+            }
+            return coords;
+        }
+
+        function preCalculateGestures() {
+            GESTURE_TARGETS.WO = generateTextCoordinates("我", 70, 2);
+            GESTURE_TARGETS.NI = generateTextCoordinates("你", 70, 2);
+            GESTURE_TARGETS.YES = generateTextCoordinates("YES", 60, 2);
+            GESTURE_TARGETS.HEART = generateHeartShape(VIZ.count);
+        }
+
+        function applyTextToParticles(text) {
+            const xOffset = (text === 'LOVE') ? 6 : 0;
+            const coords = generateTextCoordinates(text);
+            const shuffled = [...particleSystem].sort(() => 0.5 - Math.random());
+            shuffled.forEach((p, i) => {
+                if (i < coords.length) {
+                    const pos = coords[i].clone(); pos.x += xOffset;
+                    p.posText.copy(pos);
+                } else {
+                    p.posText.set(0,0,0);
+                }
+            });
+        }
+
+        class Particle {
+            constructor(mesh, type) {
+                this.mesh = mesh; this.type = type;
+                this.origColor = mesh.material.color.clone(); 
+                this.posTree = new THREE.Vector3(); this.posScatter = new THREE.Vector3(); this.posText = new THREE.Vector3();
+                this.baseScale = mesh.scale.x; this.randomOffset = Math.random();
+                this.calcTreePos(); this.calcScatterPos();
+                this.mesh.position.copy(this.posTree);
+            }
+            calcTreePos() {
+                const h = VIZ.treeH; let t = Math.pow(Math.random(), 0.9);
+                const y = (t*h)-(h/2); const r = VIZ.treeR*(1-t)*(0.7+Math.random()*0.3);
+                const angle = t*45+Math.random()*6.28; this.posTree.set(Math.cos(angle)*r, y, Math.sin(angle)*r);
+            }
+            calcScatterPos() {
+                const r = VIZ.scatterR*(0.5+Math.random()); const theta=Math.random()*Math.PI*2; const phi=Math.acos(2*Math.random()-1);
+                this.posScatter.set(r*Math.sin(phi)*Math.cos(theta), r*Math.sin(phi)*Math.sin(theta), r*Math.cos(phi));
+            }
+            update(dt, index) {
+                let target = this.posTree; let speed = 2.0; let scale = this.baseScale;
+                let targetColor = this.origColor; 
+
+                if (STATE.mode === 'INTERACTIVE') {
+                    // 使用 Lerp 后的平滑值来调整树的整体形态 (微弱呼吸)
+                    
+                    if (STATE.gestureMode === 'WO') { target = GESTURE_TARGETS.WO[index % GESTURE_TARGETS.WO.length]; speed = 4.0; } 
+                    else if (STATE.gestureMode === 'NI') { target = GESTURE_TARGETS.NI[index % GESTURE_TARGETS.NI.length]; speed = 4.0; }
+                    else if (STATE.gestureMode === 'YES') { target = GESTURE_TARGETS.YES[index % GESTURE_TARGETS.YES.length]; speed = 4.0; }
+                    else if (STATE.gestureMode === 'HEART') {
+                        target = GESTURE_TARGETS.HEART[index % GESTURE_TARGETS.HEART.length];
+                        speed = 6.0; targetColor = new THREE.Color(0xff0000); 
+                    }
+                } else if (STATE.mode === 'WAITING') {
+                    target = this.posScatter; speed = 0.8;
+                    this.mesh.rotation.x+=dt*0.5; this.mesh.rotation.y+=dt*0.5;
+                } else if (STATE.mode === 'TREE_FINAL') {
+                    target = this.posTree; speed = 4.0;
+                } else if (STATE.mode === 'TEXT_DISPLAY') {
+                    if (this.posText.lengthSq() > 0) { target = this.posText; speed = 3.0; scale = this.baseScale*1.5; } 
+                    else { target = this.posScatter; scale = 0; }
+                }
+
+                // 核心：使用 dt * speed 进行平滑插值
+                this.mesh.position.lerp(target, speed*dt);
+                this.mesh.material.color.lerp(targetColor, dt * 5);
+                
+                if (this.type==='GOLD') { 
+                    const p=0.8+0.4*Math.sin(clock.elapsedTime*3+this.randomOffset*10); 
+                    this.mesh.scale.setScalar(scale*p); 
+                } else { this.mesh.scale.setScalar(scale); }
+            }
+        }
+
+        function createParticles() {
+            const matGold = new THREE.MeshStandardMaterial({ 
+                color: 0xffd700, metalness: 1.0, roughness: 0.1, 
+                emissive: 0x442200, emissiveIntensity: 0.2 
+            });
+            const matGreen = new THREE.MeshStandardMaterial({ 
+                color: 0x053010, metalness: 0.3, roughness: 0.6,
+                emissive: 0x001100, emissiveIntensity: 0.1 
+            });
+            const matRed = new THREE.MeshPhysicalMaterial({
+                color: 0xaa0000, metalness: 0.2, roughness: 0.1, 
+                clearcoat: 1.0, emissive: 0x330000, emissiveIntensity: 0.3
+            });
+            
+            const boxGeo = new THREE.BoxGeometry(0.35,0.35,0.35); const sphereGeo=new THREE.SphereGeometry(0.2,16,16);
+            for(let i=0;i<VIZ.count;i++){
+                const rand=Math.random(); let mesh, type;
+                if(rand<0.6){ mesh=new THREE.Mesh(boxGeo, matGreen.clone()); type='GREEN';}
+                else if(rand<0.9){ mesh=new THREE.Mesh(boxGeo, matGold.clone()); type='GOLD';}
+                else{ mesh=new THREE.Mesh(sphereGeo, matRed.clone()); type='RED';}
+                mesh.rotation.set(Math.random()*3,Math.random()*3,Math.random()*3); mainGroup.add(mesh); particleSystem.push(new Particle(mesh, type));
+            }
+            const star = new THREE.Mesh(new THREE.OctahedronGeometry(1.5,0), new THREE.MeshStandardMaterial({color:0xffdd88,emissive:0xffaa00,emissiveIntensity:3}));
+            star.position.set(0,VIZ.treeH/2+1,0); mainGroup.add(star);
+        }
+
+        function createPhoto() {
+            photoGroup = new THREE.Group();
+            // 容错图片
+            const url = CFG.assets.photoUrl || "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+            new THREE.TextureLoader().load(url, (tex) => {
+                tex.colorSpace = THREE.SRGBColorSpace;
+                const aspect = tex.image.width / tex.image.height;
+                const w=4; const h=w/aspect;
+                const frame = new THREE.Mesh(new THREE.BoxGeometry(w+0.4,h+0.4,0.2), new THREE.MeshStandardMaterial({color:0xffd700,metalness:1,roughness:0.1}));
+                const pic = new THREE.Mesh(new THREE.PlaneGeometry(w,h), new THREE.MeshBasicMaterial({map:tex}));
+                pic.position.z=0.11; photoGroup.add(frame,pic);
+            }, undefined, (err) => {
+                console.log("Photo load failed, using placeholder");
+            });
+            photoGroup.visible=false; photoGroup.scale.set(0,0,0); photoGroup.position.set(0,5,0); mainGroup.add(photoGroup);
+        }
+
+        // === 模式切换 ===
+        function enterQuantumMode() {
+            STATE.mode = 'WAITING';
+            STATE.gestureMode = 'NONE';
+            document.getElementById('ui-interactive').classList.add('ui-hidden');
+            document.getElementById('quantum-btn').classList.add('ui-hidden');
+            document.getElementById('ui-waiting').style.opacity = 1;
+            document.getElementById('return-btn').classList.add('active');
+            document.getElementById('webcam-hud').classList.remove('active'); // 隐藏摄像头窗口
+            photoGroup.visible = false; photoGroup.scale.set(0,0,0);
+            document.getElementById('ui-final').style.opacity = 0;
+        }
+
+        function returnToInteractive() {
+            STATE.mode = 'INTERACTIVE';
+            STATE.gestureMode = 'NONE';
+            document.getElementById('ui-interactive').classList.remove('ui-hidden');
+            document.getElementById('quantum-btn').classList.remove('ui-hidden');
+            document.getElementById('ui-waiting').style.opacity = 0;
+            document.getElementById('ui-final').style.opacity = 0;
+            document.getElementById('return-btn').classList.remove('active');
+            if(STATE.cameraAvailable) document.getElementById('webcam-hud').classList.add('active'); // 恢复摄像头窗口
+            camera.position.set(0, 2, 45);
+            photoGroup.visible = false; photoGroup.scale.set(0,0,0);
+        }
+
+        function handleCommand(cmd) {
+            const bgm = document.getElementById('bgm');
+            // 尝试播放音乐 (容错)
+            if (bgm.paused && CFG.assets.bgmUrl) { 
+                bgm.src = CFG.assets.bgmUrl; 
+                bgm.play().catch(e=>{ console.log("Audio play prevented"); }); 
+            }
+            
+            document.getElementById('ui-waiting').classList.add('ui-hidden');
+            if (cmd === 'love') {
+                STATE.mode = 'TREE_FINAL';
+                setTimeout(() => {
+                    document.getElementById('ui-final').style.opacity = 1;
+                    document.getElementById('final-msg').innerText = CFG.business.coupleName + " 圣诞快乐";
+                    photoGroup.visible = true;
+                }, 3000);
+            } else if (['5','2','0'].includes(cmd)) {
+                STATE.mode = 'TEXT_DISPLAY'; photoGroup.visible = false;
+                if(cmd==='5') applyTextToParticles("I");
+                if(cmd==='2') applyTextToParticles("LOVE");
+                if(cmd==='0') applyTextToParticles("YOU");
+            }
+        }
+
+        function initMQTT() {
+            const client = mqtt.connect(CFG.mqtt.host, { username: CFG.mqtt.username, password: CFG.mqtt.password, clientId: CFG.mqtt.clientId });
+            client.on('connect', () => client.subscribe(CFG.business.topic));
+            client.on('message', (t, m) => { try { const d=JSON.parse(m.toString()); if(d.cmd) handleCommand(d.cmd); } catch(e){} });
+        }
+
+        // === 视觉识别 (MediaPipe) ===
+        async function initMediaPipe() {
+            const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
+            
+            handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" },
+                runningMode: "VIDEO", numHands: 1
+            });
+
+            faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+                baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" },
+                runningMode: "VIDEO", numFaces: 1
+            });
+
+            video = document.getElementById('webcam');
+            if (navigator.mediaDevices?.getUserMedia) {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                video.addEventListener("loadeddata", predictWebcam);
+            }
+        }
+        
+        function countFingers(lm) {
+            let count = 0;
+            // 简单的手指伸展检测逻辑
+            if (lm[4].x < lm[3].x) count++; 
+            if (lm[8].y < lm[6].y) count++; 
+            if (lm[12].y < lm[10].y) count++; 
+            if (lm[16].y < lm[14].y) count++; 
+            if (lm[20].y < lm[18].y) count++; 
+            return count;
+        }
+
+        function detectNod(lm) {
+            const nose = lm[1]; const now = Date.now();
+            STATE.face.noseY.push({ y: nose.y, t: now });
+            STATE.face.noseY = STATE.face.noseY.filter(p => now - p.t < 1000);
+            if (STATE.face.noseY.length < 5) return false;
+            const ys = STATE.face.noseY.map(p => p.y);
+            return (Math.max(...ys) - Math.min(...ys) > 0.08); 
+        }
+
+        let lastVideoTime = -1;
+        async function predictWebcam() {
+            if (video.currentTime !== lastVideoTime) {
+                lastVideoTime = video.currentTime;
+                const now = performance.now();
+                
+                // === 手势检测 ===
+                if (handLandmarker) {
+                    const res = handLandmarker.detectForVideo(video, now);
+                    if (res.landmarks.length > 0) {
+                        STATE.hand.detected = true;
+                        const lm = res.landmarks[0];
+                        
+                        // [关键优化] 目标值设定 (不直接赋值给 rot)
+                        STATE.targetRot.x = (lm[9].y - 0.5) * 2;
+                        STATE.targetRot.y = (lm[9].x - 0.5) * -2; 
+
+                        const fingers = countFingers(lm);
+                        // 防抖动逻辑：只有明确的手势才切换
+                        if (fingers === 5) STATE.gestureMode = 'WO';
+                        else if (fingers === 1) STATE.gestureMode = 'NI';
+                        else if (fingers === 0) STATE.gestureMode = 'HEART';
+                        else STATE.gestureMode = 'NONE';
+                    } else {
+                        STATE.hand.detected = false;
+                        STATE.targetRot.x = 0; STATE.targetRot.y = 0; // 手离开时回正
+                        if (STATE.gestureMode !== 'YES') STATE.gestureMode = 'NONE';
+                    }
+                }
+
+                // === 面部检测 ===
+                if (faceLandmarker) {
+                    const res = faceLandmarker.detectForVideo(video, now);
+                    if (res.faceLandmarks.length > 0) {
+                        if (detectNod(res.faceLandmarks[0])) {
+                            STATE.gestureMode = 'YES';
+                            setTimeout(() => { if(STATE.gestureMode === 'YES') STATE.gestureMode = 'NONE'}, 2000);
+                        }
+                    }
+                }
+            }
+            requestAnimationFrame(predictWebcam);
+        }
+
+        function setupPostProcessing() {
+            const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+            bloom.threshold = 0.15; bloom.strength = 0.6; bloom.radius = 0.5;
+            composer = new EffectComposer(renderer);
+            composer.addPass(new RenderPass(scene, camera));
+            composer.addPass(bloom);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = clock.getDelta();
+            
+            // [关键优化] 丝滑平滑插值 (Smoothing)
+            // 无论任何模式，主群组的旋转都使用 Lerp 逼近目标值
+            const smoothFactor = 3.0 * dt; // 阻尼系数
+            STATE.currentRot.x += (STATE.targetRot.x - STATE.currentRot.x) * smoothFactor;
+            STATE.currentRot.y += (STATE.targetRot.y - STATE.currentRot.y) * smoothFactor;
+
+            if (STATE.mode === 'INTERACTIVE') {
+                if (STATE.hand.detected && STATE.gestureMode === 'NONE') {
+                    // 手势控制时，应用平滑后的旋转值
+                    mainGroup.rotation.y = STATE.currentRot.y;
+                    mainGroup.rotation.x = STATE.currentRot.x;
+                } else {
+                    // 自动回正
+                    STATE.targetRot.x = 0; 
+                    STATE.targetRot.y += 0.05 * dt; // 极慢的自转
+                    mainGroup.rotation.y += 0.2 * dt; // 叠加一点自转
+                    mainGroup.rotation.x *= 0.95;
+                }
+                
+                // 特殊手势下，强制回正以便观看文字
+                if(STATE.gestureMode !== 'NONE') { 
+                    mainGroup.rotation.y *= 0.95; 
+                    mainGroup.rotation.x *= 0.95; 
+                }
+
+            } else if (STATE.mode === 'WAITING') {
+                mainGroup.rotation.y += 0.05 * dt; camera.position.z = THREE.MathUtils.lerp(camera.position.z, 60, dt);
+            } else if (STATE.mode === 'TREE_FINAL') {
+                mainGroup.rotation.y += 0.2 * dt; camera.position.z = THREE.MathUtils.lerp(camera.position.z, 25, dt);
+                if(photoGroup.visible) { photoGroup.scale.lerp(new THREE.Vector3(1,1,1), dt*3); photoGroup.lookAt(camera.position); }
+            } else if (STATE.mode === 'TEXT_DISPLAY') {
+                mainGroup.rotation.y = THREE.MathUtils.lerp(mainGroup.rotation.y, 0, dt*2); 
+                camera.position.z = THREE.MathUtils.lerp(camera.position.z, 35, dt);
+            }
+
+            particleSystem.forEach((p,i) => p.update(dt, i));
+            composer.render();
+        }
+        window.addEventListener('resize', () => { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth,window.innerHeight); composer.setSize(window.innerWidth,window.innerHeight); });
+        init();
     </script>
 </body>
 </html>
