@@ -3,13 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Visual Alchemy - Frozen Memory</title>
+    <title>Visual Alchemy - Atmosphere</title>
     
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="config.js"></script>
 
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Times New Roman', serif; }
+        
+        /* === [核心] 动态背景层 === */
+        #bg-layer {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-size: cover; background-position: center;
+            z-index: 0; /* 最底层 */
+            transition: background-image 1.5s ease-in-out, opacity 1s;
+        }
+        /* 电影级暗调滤镜：确保背景不抢前景的风头 */
+        #bg-layer::after {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.4); /* 40% 压暗 */
+            backdrop-filter: blur(3px); /* 3px 虚焦散景 */
+        }
+
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
         
         /* === UI 通用 === */
@@ -20,7 +35,7 @@
         /* === 礼物加载层 === */
         #gift-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: #050505; z-index: 999;
+            background: #000; z-index: 999;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
             transition: opacity 1.5s ease;
         }
@@ -56,7 +71,7 @@
         /* === 按钮组 === */
         .btn-group-right { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 20px; align-items: flex-end; }
         
-        .return-btn, .quantum-btn {
+        .return-btn, .quantum-btn, .theme-btn {
             writing-mode: vertical-rl; text-orientation: mixed;
             backdrop-filter: blur(10px); transition: all 0.5s; border-radius: 4px;
         }
@@ -73,8 +88,15 @@
             color: #d4af37; padding: 20px 12px; font-size: 13px; letter-spacing: 4px;
             box-shadow: 0 0 20px rgba(212, 175, 55, 0.2);
         }
+        
+        /* 隐藏式主题切换 (彩蛋) */
+        .theme-switch {
+            width: 30px; height: 30px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.3);
+            cursor: pointer; transition: transform 0.2s; margin-top: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        .theme-switch:hover { transform: scale(1.1); border-color: #fff; }
 
-        /* === 录制按钮 (左下角) === */
+        /* === 录制按钮 === */
         #record-btn {
             position: absolute; bottom: 30px; left: 20px; width: 50px; height: 50px;
             border: 2px solid rgba(255,255,255,0.3); border-radius: 50%;
@@ -82,14 +104,12 @@
             cursor: pointer; z-index: 20; transition: all 0.3s; pointer-events: auto;
             backdrop-filter: blur(5px);
         }
-        #record-inner {
-            width: 20px; height: 20px; background: #ff4444; border-radius: 50%; transition: all 0.3s;
-        }
+        #record-inner { width: 20px; height: 20px; background: #ff4444; border-radius: 50%; transition: all 0.3s; }
         #record-btn.recording { border-color: #ff4444; box-shadow: 0 0 15px #ff4444; }
         #record-btn.recording #record-inner { width: 14px; height: 14px; border-radius: 2px; animation: pulseRed 1s infinite; }
         @keyframes pulseRed { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
-        /* === 摄像头 HUD (右下角) === */
+        /* === 摄像头 HUD === */
         #webcam-hud { 
             position: absolute; bottom: 20px; right: 20px; width: 120px; height: 90px; 
             border: 1px solid rgba(212,175,55,0.3); border-radius: 8px; overflow: hidden;
@@ -98,17 +118,13 @@
             box-shadow: 0 0 20px rgba(0,0,0,0.8); background: #000;
         }
         #webcam-hud.active { opacity: 0.8; }
-        #webcam-hud.minimized {
-            width: 30px; height: 30px; border-radius: 50%; border-color: rgba(212,175,55,0.8);
-        }
+        #webcam-hud.minimized { width: 30px; height: 30px; border-radius: 50%; border-color: rgba(212,175,55,0.8); }
         #webcam-hud.minimized video { opacity: 0; }
-        /* 最小化时的指示灯 */
         #webcam-hud::after {
             content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             width: 8px; height: 8px; background: #d4af37; border-radius: 50%; opacity: 0; transition: opacity 0.3s;
         }
         #webcam-hud.minimized::after { opacity: 1; box-shadow: 0 0 8px #d4af37; }
-        
         #webcam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); transition: opacity 0.3s; }
 
         /* UI 2 & 3 */
@@ -125,6 +141,10 @@
 <body>
     <audio id="bgm" loop preload="auto"></audio>
     
+    <!-- 背景层 (Dynamic Background) -->
+    <div id="bg-layer"></div>
+
+    <!-- 礼物加载层 -->
     <div id="gift-layer">
         <div class="gift-box">
             <div class="gift-title">A Christmas Gift</div>
@@ -138,6 +158,7 @@
 
     <div id="canvas-container"></div>
 
+    <!-- 互动界面 -->
     <div id="ui-interactive" class="ui-layer">
         <h1>Merry Christmas</h1>
         <div class="gesture-hint">
@@ -148,12 +169,19 @@
         </div>
     </div>
 
+    <!-- 按钮组 -->
     <div class="btn-group-right ui-layer clickable">
         <div id="return-btn" class="return-btn clickable" onclick="returnToInteractive()">⟲ 回到灵气</div>
         <div id="quantum-btn" class="quantum-btn clickable" onclick="enterQuantumMode()">看看他想说什么？</div>
+        
+        <!-- 主题切换彩蛋 (右侧小圆点) -->
+        <div style="margin-top:20px; display:flex; flex-direction:column; gap:10px; opacity:0.9;">
+            <div class="theme-switch" style="background:linear-gradient(135deg, #ffd700, #b8860b);" onclick="changeTheme('gold')" title="Luxury Gold"></div>
+            <div class="theme-switch" style="background:linear-gradient(135deg, #00aaff, #004488);" onclick="changeTheme('blue')" title="Frozen Blue"></div>
+            <div class="theme-switch" style="background:linear-gradient(135deg, #ff5533, #882200);" onclick="changeTheme('warm')" title="Cozy Warm"></div>
+        </div>
     </div>
 
-    <!-- [修改 3] 录制按钮 -->
     <div id="record-btn" class="ui-layer clickable" onclick="toggleRecording()">
         <div id="record-inner"></div>
     </div>
@@ -161,7 +189,6 @@
     <div id="ui-waiting" class="ui-layer"><div class="status-text">WAITING FOR LOVE SIGNAL...</div></div>
     <div id="ui-final" class="ui-layer"><div class="final-msg" id="final-msg"></div></div>
     
-    <!-- [修改 2] 可收起的 HUD -->
     <div id="webcam-hud" onclick="toggleHud(this)"><video id="webcam" autoplay playsinline muted></video></div>
 
     <script type="module">
@@ -172,16 +199,34 @@
         import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
         import { FilesetResolver, HandLandmarker, FaceLandmarker } from '@mediapipe/tasks-vision';
 
+        // === 1. 核心主题配置 ===
+        // 注意：在线预览时使用 URL，本地运行时请改为 'theme_gold.jpg'
+        const THEMES = {
+            gold: { 
+                bg: 'https://images.unsplash.com/photo-1576013551627-0cc20b96c2a7?q=80&w=2574&auto=format&fit=crop', // 线上预览图 (Gold Bokeh)
+                // bg: 'theme_gold.jpg', // <--- 本地运行时请取消此行注释
+                snowColor: 0xffddaa, lightColor: 0xffaa00, fog: 0x110d00 
+            },
+            blue: { 
+                bg: 'https://images.unsplash.com/photo-1483664852095-d6cc687070ef?q=80&w=2670&auto=format&fit=crop', // 线上预览图 (Winter Blue)
+                // bg: 'theme_blue.jpg', // <--- 本地运行时请取消此行注释
+                snowColor: 0xaaddff, lightColor: 0x0088ff, fog: 0x000511 
+            },
+            warm: { 
+                bg: 'https://images.unsplash.com/photo-1544256718-3bcf237f3974?q=80&w=2574&auto=format&fit=crop', // 线上预览图 (Cozy Fireplace)
+                // bg: 'theme_warm.jpg', // <--- 本地运行时请取消此行注释
+                snowColor: 0xffaaaa, lightColor: 0xff4422, fog: 0x110500 
+            }
+        };
+        let currentTheme = 'gold';
+
         const CFG = window.CONFIG || { business: { coupleName: "May & Commander", topic: "test" }, assets: { photoUrl: "", bgmUrl: "" } };
         document.querySelector('.sender-name').innerText = `From ${CFG.business.coupleName}`;
 
         const STATE = {
-            mode: 'LOADING',
-            gestureMode: 'NONE', 
-            targetRot: { x: 0, y: 0 },
-            currentRot: { x: 0, y: 0 },
-            hand: { detected: false, x: 0, y: 0, fingers: 0 }, 
-            face: { detected: false, noseY: [] },
+            mode: 'LOADING', gestureMode: 'NONE', 
+            targetRot: { x: 0, y: 0 }, currentRot: { x: 0, y: 0 },
+            hand: { detected: false, x: 0, y: 0, fingers: 0 }, face: { detected: false, noseY: [] },
             cameraAvailable: false
         };
 
@@ -189,118 +234,91 @@
 
         let scene, camera, renderer, composer;
         let mainGroup, particleSystem = [], photoGroup, snowSystem;
+        let ambientLight, innerLight, spotLight; 
         let handLandmarker, faceLandmarker, video;
         let clock = new THREE.Clock();
         const GESTURE_TARGETS = { WO: [], NI: [], YES: [], HEART: [], TEMP_TEXT: [] };
 
-        // 录制相关
-        let mediaRecorder;
-        let recordedChunks = [];
-        let isRecording = false;
+        // 录制
+        let mediaRecorder; let recordedChunks = []; let isRecording = false;
 
-        // 模拟进度条
+        // 加载
         let loadProgress = 0;
-        const progressInterval = setInterval(() => {
-            if (loadProgress < 90) { loadProgress += Math.random() * 5; updateProgressBar(loadProgress); }
-        }, 200);
-
+        const progressInterval = setInterval(() => { if (loadProgress < 90) { loadProgress += Math.random() * 5; updateProgressBar(loadProgress); } }, 200);
         function updateProgressBar(val) { document.getElementById('progress-bar').style.width = val + '%'; }
 
         async function init() {
             initThree();
-            createSnow(); // [修改 1] 增加雪花
+            createSnow();
             preCalculateGestures();
             createParticles();
             createPhoto();
             setupPostProcessing();
             
-            try {
-                await initMediaPipe();
-                STATE.cameraAvailable = true;
-            } catch (e) {
-                console.warn("Camera fallback");
-            }
+            // 默认启动金色主题
+            changeTheme('gold');
+
+            try { await initMediaPipe(); STATE.cameraAvailable = true; } catch (e) { console.warn("Camera fallback"); }
             initMQTT();
 
             clearInterval(progressInterval);
             updateProgressBar(100);
             setTimeout(() => { document.getElementById('open-btn').classList.add('ready'); }, 500);
 
+            // 暴露全局
             window.enterQuantumMode = enterQuantumMode;
             window.returnToInteractive = returnToInteractive;
             window.openGift = openGift;
             window.toggleHud = toggleHud;
             window.toggleRecording = toggleRecording;
+            window.changeTheme = changeTheme;
             
             animate();
         }
 
-        // [修改 2] HUD 开关
-        function toggleHud(el) {
-            el.classList.toggle('minimized');
+        // === [核心功能] 主题切换 ===
+        function changeTheme(themeKey) {
+            if (!THEMES[themeKey]) return;
+            currentTheme = themeKey;
+            const theme = THEMES[themeKey];
+            
+            // 1. 换背景图
+            document.getElementById('bg-layer').style.backgroundImage = `url(${theme.bg})`;
+            
+            // 2. 换雪花颜色
+            if (snowSystem) snowSystem.material.color.setHex(theme.snowColor);
+            
+            // 3. 换灯光氛围
+            if (innerLight) innerLight.color.setHex(theme.lightColor);
+            if (spotLight) spotLight.color.setHex(theme.lightColor);
+            if (scene.fog) scene.fog.color.setHex(theme.fog);
         }
 
-        // [修改 3] 录制功能
-        function toggleRecording() {
-            if (!isRecording) {
-                startRecording();
-            } else {
-                stopRecording();
-            }
-        }
-
+        function toggleHud(el) { el.classList.toggle('minimized'); }
+        function toggleRecording() { isRecording ? stopRecording() : startRecording(); }
         function startRecording() {
             const canvas = document.querySelector('canvas');
-            const stream = canvas.captureStream(30); // 30 FPS
-            
-            // 尝试支持的格式
+            const stream = canvas.captureStream(30); 
             let options = { mimeType: 'video/webm;codecs=vp9' };
-            if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                options = { mimeType: 'video/webm' };
-            }
-
-            try {
-                mediaRecorder = new MediaRecorder(stream, options);
-            } catch (e) {
-                alert("当前浏览器不支持录制");
-                return;
-            }
-
-            mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0) recordedChunks.push(event.data);
-            };
-
+            if (!MediaRecorder.isTypeSupported(options.mimeType)) options = { mimeType: 'video/webm' };
+            try { mediaRecorder = new MediaRecorder(stream, options); } catch (e) { alert("浏览器不支持录制"); return; }
+            mediaRecorder.ondataavailable = (event) => { if (event.data.size > 0) recordedChunks.push(event.data); };
             mediaRecorder.onstop = saveVideo;
-            mediaRecorder.start();
-            isRecording = true;
+            mediaRecorder.start(); isRecording = true;
             document.getElementById('record-btn').classList.add('recording');
         }
-
-        function stopRecording() {
-            mediaRecorder.stop();
-            isRecording = false;
-            document.getElementById('record-btn').classList.remove('recording');
-        }
-
+        function stopRecording() { mediaRecorder.stop(); isRecording = false; document.getElementById('record-btn').classList.remove('recording'); }
         function saveVideo() {
             const blob = new Blob(recordedChunks, { type: 'video/webm' });
             const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            document.body.appendChild(a);
-            a.style.display = 'none';
-            a.href = url;
-            a.download = `Christmas_Memory_${Date.now()}.webm`;
-            a.click();
-            window.URL.revokeObjectURL(url);
-            recordedChunks = [];
+            const a = document.createElement('a'); document.body.appendChild(a); a.style.display = 'none'; a.href = url; a.download = `Christmas_${currentTheme}_${Date.now()}.webm`; a.click();
+            window.URL.revokeObjectURL(url); recordedChunks = [];
         }
 
         function openGift() {
             const bgm = document.getElementById('bgm');
             if (CFG.assets.bgmUrl) bgm.src = CFG.assets.bgmUrl;
-            bgm.play().catch(e => console.log("BGM Play Error:", e));
-            bgm.volume = 0.5;
-
+            bgm.play().catch(e => console.log("BGM Play Error:", e)); bgm.volume = 0.5;
             document.getElementById('gift-layer').style.opacity = 0;
             setTimeout(() => {
                 document.getElementById('gift-layer').style.display = 'none';
@@ -312,17 +330,18 @@
         function initThree() {
             const container = document.getElementById('canvas-container');
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x000000);
-            scene.fog = new THREE.FogExp2(0x000000, 0.02); // 雾效配合雪花
+            // [关键] 透明背景，让 CSS 背景图透出来
+            scene.background = null; 
+            scene.fog = new THREE.FogExp2(0x110d00, 0.02); 
 
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
             adjustCameraForMobile();
 
-            renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance", preserveDrawingBuffer: true }); // preserveDrawingBuffer for recording
+            renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance", preserveDrawingBuffer: true, alpha: true }); // alpha: true 是关键
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            renderer.toneMappingExposure = 1.2;
+            renderer.toneMappingExposure = 1.3; 
             container.appendChild(renderer.domElement);
 
             const pmremGenerator = new THREE.PMREMGenerator(renderer);
@@ -331,33 +350,30 @@
             mainGroup = new THREE.Group();
             scene.add(mainGroup);
 
-            const ambient = new THREE.AmbientLight(0xffffff, 0.2);
-            scene.add(ambient);
-            const innerLight = new THREE.PointLight(0xffaa00, 3, 30);
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+            scene.add(ambientLight);
+            
+            innerLight = new THREE.PointLight(0xffaa00, 3, 30);
             innerLight.position.set(0, 10, 0);
             mainGroup.add(innerLight);
-            const spotLight = new THREE.SpotLight(0xffeebb, 150);
+            
+            spotLight = new THREE.SpotLight(0xffeebb, 150);
             spotLight.position.set(25, 30, 25);
             spotLight.angle = 0.6;
             spotLight.penumbra = 0.5;
             scene.add(spotLight);
         }
 
-        // [修改 1] 创建雪花
         function createSnow() {
             const snowGeo = new THREE.BufferGeometry();
             const snowPos = [];
             for (let i = 0; i < VIZ.snowCount; i++) {
-                snowPos.push(
-                    (Math.random() - 0.5) * 100, // x
-                    (Math.random() - 0.5) * 60 + 20, // y
-                    (Math.random() - 0.5) * 80 - 20 // z (偏向背景)
-                );
+                snowPos.push((Math.random()-0.5)*100, (Math.random()-0.5)*60+20, (Math.random()-0.5)*80-20);
             }
             snowGeo.setAttribute('position', new THREE.Float32BufferAttribute(snowPos, 3));
             const snowMat = new THREE.PointsMaterial({
-                color: 0xffffff, size: 0.3, transparent: true, opacity: 0.6,
-                blending: THREE.AdditiveBlending
+                color: 0xffddaa, size: 0.4, transparent: true, opacity: 0.8,
+                blending: THREE.AdditiveBlending, depthWrite: false
             });
             snowSystem = new THREE.Points(snowGeo, snowMat);
             scene.add(snowSystem);
@@ -367,20 +383,17 @@
             if (!snowSystem) return;
             const positions = snowSystem.geometry.attributes.position.array;
             for (let i = 1; i < positions.length; i += 3) {
-                positions[i] -= 0.05; // 下落
-                if (positions[i] < -20) positions[i] = 40; // 循环
+                positions[i] -= 0.05; if (positions[i] < -20) positions[i] = 40;
             }
             snowSystem.geometry.attributes.position.needsUpdate = true;
-            snowSystem.rotation.y += 0.001; // 整体旋转
+            snowSystem.rotation.y += 0.001;
         }
 
         function adjustCameraForMobile() {
             const aspect = window.innerWidth / window.innerHeight;
-            if (aspect < 0.8) camera.position.set(0, 2, 70); 
-            else camera.position.set(0, 2, 45);
+            if (aspect < 0.8) camera.position.set(0, 2, 70); else camera.position.set(0, 2, 45);
         }
 
-        // ... (省略 text, heart 坐标生成函数，与上版一致，直接复用即可) ...
         function generateTextCoordinates(text, fontSize = 60, density = 2) {
             const canvas = document.createElement('canvas');
             const size = 128; canvas.width = size; canvas.height = size;
@@ -422,12 +435,8 @@
             const coords = generateTextCoordinates(text);
             const shuffled = [...particleSystem].sort(() => 0.5 - Math.random());
             shuffled.forEach((p, i) => {
-                if (i < coords.length) {
-                    const pos = coords[i].clone(); pos.x += xOffset;
-                    p.posText.copy(pos);
-                } else {
-                    p.posText.set(0,0,0);
-                }
+                if (i < coords.length) { const pos = coords[i].clone(); pos.x += xOffset; p.posText.copy(pos); } 
+                else { p.posText.set(0,0,0); }
             });
         }
 
@@ -515,9 +524,7 @@
             document.getElementById('webcam-hud').classList.remove('active'); 
             photoGroup.visible = false; photoGroup.scale.set(0,0,0);
             document.getElementById('ui-final').style.opacity = 0;
-            // [录制功能] 停止录制如果正在录
-            if(isRecording) stopRecording();
-            document.getElementById('record-btn').style.display = 'none'; // 隐藏录制按钮
+            if(isRecording) stopRecording(); document.getElementById('record-btn').style.display = 'none';
         }
 
         function returnToInteractive() {
@@ -530,7 +537,7 @@
             if(STATE.cameraAvailable) document.getElementById('webcam-hud').classList.add('active'); 
             adjustCameraForMobile(); 
             photoGroup.visible = false; photoGroup.scale.set(0,0,0);
-            document.getElementById('record-btn').style.display = 'flex'; // 显示录制按钮
+            document.getElementById('record-btn').style.display = 'flex';
         }
 
         function handleCommand(cmd) {
@@ -639,7 +646,6 @@
             STATE.currentRot.x += (STATE.targetRot.x - STATE.currentRot.x) * smoothFactor;
             STATE.currentRot.y += (STATE.targetRot.y - STATE.currentRot.y) * smoothFactor;
 
-            // [修改 1] 更新雪花
             if(snowSystem) updateSnow();
 
             if (STATE.mode === 'INTERACTIVE') {
