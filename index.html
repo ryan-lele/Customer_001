@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Visual Alchemy - Atmosphere</title>
+    <title>Visual Alchemy - Grand Finale</title>
     
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="config.js"></script>
@@ -11,18 +11,17 @@
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Times New Roman', serif; }
         
-        /* === [核心] 动态背景层 === */
+        /* === [新] 动态背景层 === */
         #bg-layer {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background-size: cover; background-position: center;
-            z-index: 0; /* 最底层 */
-            transition: background-image 1.5s ease-in-out, opacity 1s;
+            z-index: 0; transition: background-image 1.5s ease-in-out;
         }
-        /* 电影级暗调滤镜：确保背景不抢前景的风头 */
+        /* 视觉压暗蒙版 (40% 黑色) */
         #bg-layer::after {
             content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.4); /* 40% 压暗 */
-            backdrop-filter: blur(3px); /* 3px 虚焦散景 */
+            background: rgba(0, 0, 0, 0.5); /* 可在此调整背景暗度 */
+            backdrop-filter: blur(2px); /* 轻微模糊，突出前景 */
         }
 
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
@@ -35,7 +34,7 @@
         /* === 礼物加载层 === */
         #gift-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: #000; z-index: 999;
+            background: #000; z-index: 999; /* 纯黑背景防止穿帮 */
             display: flex; flex-direction: column; justify-content: center; align-items: center;
             transition: opacity 1.5s ease;
         }
@@ -89,10 +88,10 @@
             box-shadow: 0 0 20px rgba(212, 175, 55, 0.2);
         }
         
-        /* 隐藏式主题切换 (彩蛋) */
+        /* [新] 主题切换小按钮 */
         .theme-switch {
             width: 30px; height: 30px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.3);
-            cursor: pointer; transition: transform 0.2s; margin-top: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            cursor: pointer; transition: transform 0.2s; margin-top: 10px;
         }
         .theme-switch:hover { transform: scale(1.1); border-color: #fff; }
 
@@ -141,7 +140,7 @@
 <body>
     <audio id="bgm" loop preload="auto"></audio>
     
-    <!-- 背景层 (Dynamic Background) -->
+    <!-- [新] 背景层 -->
     <div id="bg-layer"></div>
 
     <!-- 礼物加载层 -->
@@ -174,11 +173,11 @@
         <div id="return-btn" class="return-btn clickable" onclick="returnToInteractive()">⟲ 回到灵气</div>
         <div id="quantum-btn" class="quantum-btn clickable" onclick="enterQuantumMode()">看看他想说什么？</div>
         
-        <!-- 主题切换彩蛋 (右侧小圆点) -->
-        <div style="margin-top:20px; display:flex; flex-direction:column; gap:10px; opacity:0.9;">
-            <div class="theme-switch" style="background:linear-gradient(135deg, #ffd700, #b8860b);" onclick="changeTheme('gold')" title="Luxury Gold"></div>
-            <div class="theme-switch" style="background:linear-gradient(135deg, #00aaff, #004488);" onclick="changeTheme('blue')" title="Frozen Blue"></div>
-            <div class="theme-switch" style="background:linear-gradient(135deg, #ff5533, #882200);" onclick="changeTheme('warm')" title="Cozy Warm"></div>
+        <!-- [新] 隐藏式主题切换 (调试用，或给用户彩蛋) -->
+        <div style="margin-top:20px; display:flex; flex-direction:column; gap:10px; opacity:0.8;">
+            <div class="theme-switch" style="background:#ffd700;" onclick="changeTheme('gold')" title="Luxury Gold"></div>
+            <div class="theme-switch" style="background:#00aaff;" onclick="changeTheme('blue')" title="Frozen Blue"></div>
+            <div class="theme-switch" style="background:#ff5533;" onclick="changeTheme('warm')" title="Cozy Warm"></div>
         </div>
     </div>
 
@@ -199,24 +198,11 @@
         import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
         import { FilesetResolver, HandLandmarker, FaceLandmarker } from '@mediapipe/tasks-vision';
 
-        // === 1. 核心主题配置 ===
-        // 注意：在线预览时使用 URL，本地运行时请改为 'theme_gold.jpg'
+        // === 全局主题配置 ===
         const THEMES = {
-            gold: { 
-                bg: 'https://images.unsplash.com/photo-1576013551627-0cc20b96c2a7?q=80&w=2574&auto=format&fit=crop', // 线上预览图 (Gold Bokeh)
-                // bg: 'theme_gold.jpg', // <--- 本地运行时请取消此行注释
-                snowColor: 0xffddaa, lightColor: 0xffaa00, fog: 0x110d00 
-            },
-            blue: { 
-                bg: 'https://images.unsplash.com/photo-1483664852095-d6cc687070ef?q=80&w=2670&auto=format&fit=crop', // 线上预览图 (Winter Blue)
-                // bg: 'theme_blue.jpg', // <--- 本地运行时请取消此行注释
-                snowColor: 0xaaddff, lightColor: 0x0088ff, fog: 0x000511 
-            },
-            warm: { 
-                bg: 'https://images.unsplash.com/photo-1544256718-3bcf237f3974?q=80&w=2574&auto=format&fit=crop', // 线上预览图 (Cozy Fireplace)
-                // bg: 'theme_warm.jpg', // <--- 本地运行时请取消此行注释
-                snowColor: 0xffaaaa, lightColor: 0xff4422, fog: 0x110500 
-            }
+            gold: { bg: 'theme_gold.jpg', snowColor: 0xffddaa, lightColor: 0xffaa00, fog: 0x110d00 },
+            blue: { bg: 'theme_blue.jpg', snowColor: 0xaaddff, lightColor: 0x0088ff, fog: 0x000511 },
+            warm: { bg: 'theme_warm.jpg', snowColor: 0xffaaaa, lightColor: 0xff4422, fog: 0x110500 }
         };
         let currentTheme = 'gold';
 
@@ -224,9 +210,12 @@
         document.querySelector('.sender-name').innerText = `From ${CFG.business.coupleName}`;
 
         const STATE = {
-            mode: 'LOADING', gestureMode: 'NONE', 
-            targetRot: { x: 0, y: 0 }, currentRot: { x: 0, y: 0 },
-            hand: { detected: false, x: 0, y: 0, fingers: 0 }, face: { detected: false, noseY: [] },
+            mode: 'LOADING',
+            gestureMode: 'NONE', 
+            targetRot: { x: 0, y: 0 },
+            currentRot: { x: 0, y: 0 },
+            hand: { detected: false, x: 0, y: 0, fingers: 0 }, 
+            face: { detected: false, noseY: [] },
             cameraAvailable: false
         };
 
@@ -234,7 +223,7 @@
 
         let scene, camera, renderer, composer;
         let mainGroup, particleSystem = [], photoGroup, snowSystem;
-        let ambientLight, innerLight, spotLight; 
+        let ambientLight, innerLight, spotLight; // 全局灯光引用以便变色
         let handLandmarker, faceLandmarker, video;
         let clock = new THREE.Clock();
         const GESTURE_TARGETS = { WO: [], NI: [], YES: [], HEART: [], TEMP_TEXT: [] };
@@ -242,9 +231,11 @@
         // 录制
         let mediaRecorder; let recordedChunks = []; let isRecording = false;
 
-        // 加载
+        // 加载进度
         let loadProgress = 0;
-        const progressInterval = setInterval(() => { if (loadProgress < 90) { loadProgress += Math.random() * 5; updateProgressBar(loadProgress); } }, 200);
+        const progressInterval = setInterval(() => {
+            if (loadProgress < 90) { loadProgress += Math.random() * 5; updateProgressBar(loadProgress); }
+        }, 200);
         function updateProgressBar(val) { document.getElementById('progress-bar').style.width = val + '%'; }
 
         async function init() {
@@ -255,10 +246,11 @@
             createPhoto();
             setupPostProcessing();
             
-            // 默认启动金色主题
+            // 初始化主题
             changeTheme('gold');
 
-            try { await initMediaPipe(); STATE.cameraAvailable = true; } catch (e) { console.warn("Camera fallback"); }
+            try { await initMediaPipe(); STATE.cameraAvailable = true; } 
+            catch (e) { console.warn("Camera fallback"); }
             initMQTT();
 
             clearInterval(progressInterval);
@@ -276,7 +268,7 @@
             animate();
         }
 
-        // === [核心功能] 主题切换 ===
+        // [核心功能] 主题切换
         function changeTheme(themeKey) {
             if (!THEMES[themeKey]) return;
             currentTheme = themeKey;
@@ -330,18 +322,19 @@
         function initThree() {
             const container = document.getElementById('canvas-container');
             scene = new THREE.Scene();
-            // [关键] 透明背景，让 CSS 背景图透出来
+            // [修改] 移除纯色背景，设置 null 以显示 CSS 背景
             scene.background = null; 
-            scene.fog = new THREE.FogExp2(0x110d00, 0.02); 
+            scene.fog = new THREE.FogExp2(0x110d00, 0.02); // 默认金色雾
 
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
             adjustCameraForMobile();
 
-            renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance", preserveDrawingBuffer: true, alpha: true }); // alpha: true 是关键
+            // [修改] 开启 alpha 透明，让 CSS 背景透出来
+            renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance", preserveDrawingBuffer: true, alpha: true }); 
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            renderer.toneMappingExposure = 1.3; 
+            renderer.toneMappingExposure = 1.3; // 稍微调亮一点以配合背景
             container.appendChild(renderer.domElement);
 
             const pmremGenerator = new THREE.PMREMGenerator(renderer);
